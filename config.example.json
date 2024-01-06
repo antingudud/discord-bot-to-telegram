@@ -1,3 +1,4 @@
 {
-	"token":"your.token"
+	"token":"your.token",
+	"database_url":"the/url"
 }

@@ -12,10 +12,13 @@ use serenity::builder::CreateAttachment;
 
 use serde::Deserialize;
 
+mod server;
+
 #[derive(Debug)]
 #[derive(Deserialize)]
 pub struct Config {
     pub token: String,
+    pub server_address: String
 }
 
 impl Config {
@@ -156,5 +159,6 @@ impl EventHandler for Handler {
 
     async fn ready(&self, _: Context, ready: Ready) {
         println!("[Startup] INFO {} is online.", ready.user.name);
+        server::server::run().await;
     }
 }
