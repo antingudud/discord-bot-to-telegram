@@ -1,9 +1,14 @@
 use std::process;
+use std::sync::Arc;
+
+use tokio::join;
 
 use serenity::prelude::*;
 
 use discord::Config;
 use discord::Handler;
+
+use discord::server::server;
 
 #[tokio::main]
 async fn main() {
@@ -13,10 +18,19 @@ async fn main() {
     });
     let handler: Handler = Handler;
 
-    let mut client = Client::builder(config.token, GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT).event_handler(handler).await.expect("Err creating client.");
+    let mut client = Client::builder(config.token.clone(), GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT).event_handler(handler).await.expect("Err creating client.");
+    let server = server::Server::build(config);
 
-    if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
+    {
+        let mut data = client.data.write().await;
+
+        data.insert::<server::ServerWrapper>(Arc::new(RwLock::new(server::ServerWrapper {
+            server: server.clone()
+        })));
     }
 
+    let _ = join!(
+        client.start(),
+        server.run()
+    );
 }

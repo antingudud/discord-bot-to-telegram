@@ -10,9 +10,9 @@ use serenity::prelude::*;
 use serenity::builder::CreateMessage;
 use serenity::builder::CreateAttachment;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-mod server;
+pub mod server;
 
 #[derive(Debug)]
 #[derive(Deserialize)]
@@ -35,34 +35,31 @@ impl Config {
     }
 }
 
+#[derive(Serialize)]
 pub struct Msg{
-    pub message: String,
-    pub attachment: Option<std::vec::IntoIter<CreateAttachment>>
+    pub author: String,
+    pub text: String,
+    pub attachment: Vec<Attachment>
 }
 
 impl Msg {
-    pub fn new() -> Msg {
+    pub fn new() -> Msg { // remove this later
         Msg {
-            message: String::new(),
-            attachment: None
+            author: String::new(),
+            text: String::new(),
+            attachment: Vec::new()
         }
     }
 
-    pub async fn build_message(&self, msg: &Message) -> Result<Msg, Box<dyn Error>> {
-        let txt: String = self.get_content(&msg);
-        let image = self.get_image(&msg).await;
-
-        //if txt.is_some() {
-        //    let msg: String = txt.clone().unwrap();
-        //    let _i = msg.split_ascii_whitespace();
-        //}
-
-        let message: Msg = Msg {
-            message: txt,
-            attachment: image?
-        };
-
-        Ok(message)
+    pub fn build(msg: &Message) -> Msg {
+        Msg {
+            author: match &msg.author.global_name {
+                Some(x) => x.to_string(),
+                None => msg.author.name.clone()
+            },
+            text: msg.content.clone(),
+            attachment: msg.attachments.clone()
+        }
     }
 
     pub fn get_content(&self, msg: &Message) -> String {
@@ -97,7 +94,7 @@ impl Msg {
         Ok(result)
     }
 
-    async fn download_file(&self, img_url: &String, filename: &String) -> Result<CreateAttachment, Box<dyn Error>> {
+    pub async fn download_file(&self, img_url: &String, filename: &String) -> Result<CreateAttachment, Box<dyn Error>> {
         let client = reqwest::Client::new();
         let res = client.get(img_url)
             .send()
@@ -122,43 +119,24 @@ impl EventHandler for Handler {
         if msg.author.id.get() == self_id {
             return ();
         }
-        let mesg: Msg = Msg::new();
-
-        println!("Author: {}\nContent: {}\nAttachments: {:?}\n", msg.author.name, msg.content, msg.attachments);
-
-        let desc: Msg = match mesg.build_message(&msg).await {
-            Ok(ok) => ok,
-            Err(e) => {
-                println!("[Message] Error occured during message parsing: {:?}", e);
-                return ();
-            }
-        };
-        let mut author_name = match msg.author.global_name {
-            Some(ok) => ok.to_owned(),
-            None => msg.author.name.to_owned()
-        };
-        author_name.push_str(": ");
-        author_name.push_str(&desc.message);
-        let builder = match desc.attachment {
-            Some(ok) => {
-                CreateMessage::new()
-                    .add_files(ok)
-                    .content(author_name)
-            },
-            None => {
-                //println!("[Message] Minor problem: {:?}", e);
-                CreateMessage::new()
-                    .content(author_name)
-            }
-        };
-        if let Err(why) = msg.channel_id.send_message(&ctx.http, builder).await {
-            println!("[Message] Error sending message: {why:?}");
+        if msg.content.starts_with("|") {
+            return ();
         }
+        let mesg: Msg = Msg::build(&msg);
+        let lock = {
+            let data_read = ctx.data.read().await;
+            data_read.get::<server::server::ServerWrapper>().unwrap().clone()
+        };
 
+        {
+            let server_wrapper = lock.write().await;
+            if let Err(why) = server_wrapper.server.send_request(mesg).await {
+                println!("[ERROR] At message handler: {:?}", why);
+            };
+        }
     }
 
     async fn ready(&self, _: Context, ready: Ready) {
         println!("[Startup] INFO {} is online.", ready.user.name);
-        server::server::run().await;
     }
 }
