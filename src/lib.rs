@@ -1,6 +1,7 @@
 use std::fs;
 use std::error::Error;
 use std::env;
+use std::sync::Arc;
 
 use serenity::async_trait;
 use serenity::model::channel::Message;
@@ -109,6 +110,16 @@ impl Msg {
     }
 }
 
+struct Store;
+
+pub struct DataWrapper {
+    pub forum_id: u64,
+    pub tele_id: i64
+}
+
+impl TypeMapKey for DataWrapper {
+    type Value = Arc<RwLock<DataWrapper>>;
+}
 
 pub struct Handler;
 

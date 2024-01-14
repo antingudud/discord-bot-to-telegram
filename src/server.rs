@@ -29,7 +29,8 @@ pub mod server {
     #[derive(Debug, Clone)]
     pub struct Server {
         address: String,
-        channel_id: u64
+        channel_id: u64,
+        forum_id: u64
     }
 
     impl Server {
@@ -38,7 +39,8 @@ pub mod server {
             Server {
                 address,
                 //channel_id: 810508141578027028 acds
-                channel_id: 1194874734198935633
+                channel_id: 1194874734198935633,
+                forum_id: 1195650169216184370
             }
         }
 
@@ -47,6 +49,10 @@ pub mod server {
                 .route("/post-message", post({
                     let chid = self.channel_id.clone();
                     move |payload| pass_message(payload, chid)
+                }))
+                .route("/init", post({
+                    let chid = self.forum_id.clone();
+                    move |payload| init(payload, chid)
                 }));
 
             println!("Server is running at {}", self.address);
@@ -83,6 +89,16 @@ pub mod server {
             Ok(())
         }
     }
+
+    // Functions below should get it's own discord module
+    
+    async fn init(Json(payload): Json<PayloadInit>, channel_id: u64) -> (StatusCode, Json<String>) {
+        let chid: ChannelId = ChannelId::new(channel_id);
+        chid.create_forum_post();
+
+        let message = String::from("Success. Forum post created");
+        (StatusCode::OK, Json(message))
+    }  
 
     async fn pass_message(Json(payload): Json<CreateMsg>, channel_id: u64) -> (StatusCode, Json<String>) {
         println!("Delivery:\n{:?}", payload);
@@ -132,6 +148,11 @@ pub mod server {
 
         ChannelId::new(ch_id).send_message(http, message).await?;
         Ok(())
+    }
+
+    #[derive(Deserialize)]
+    pub struct PayloadInit {
+        id: i64
     }
 
     #[derive(Debug, Deserialize)]

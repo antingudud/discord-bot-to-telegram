@@ -27,6 +27,11 @@ async fn main() {
         data.insert::<server::ServerWrapper>(Arc::new(RwLock::new(server::ServerWrapper {
             server: server.clone()
         })));
+
+        data.insert::<discord::DataWrapper>(Arc::new(RwLock::new(discord::DataWrapper {
+            forum_id: 0,
+            tele_id: 0
+        })));
     }
 
     let _ = join!(
