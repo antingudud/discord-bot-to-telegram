@@ -2,13 +2,13 @@ use std::fs;
 use std::error::Error;
 use std::env;
 use std::sync::Arc;
+use std::collections::HashMap;
 
 use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::channel::Attachment;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
-use serenity::builder::CreateMessage;
 use serenity::builder::CreateAttachment;
 
 use serde::{Deserialize, Serialize};
@@ -110,11 +110,14 @@ impl Msg {
     }
 }
 
-struct Store;
-
 pub struct DataWrapper {
-    pub forum_id: u64,
-    pub tele_id: i64
+    pub disc_id: Option<
+            HashMap<Option<u64>, Option<i64>>
+        >, //HashMap<forum_id, tele_id>
+    pub tele_id: Option<
+            HashMap<Option<i64>, Option<u64>>
+        >,
+    pub context: Option<Context>
 }
 
 impl TypeMapKey for DataWrapper {
@@ -133,6 +136,34 @@ impl EventHandler for Handler {
         if msg.content.starts_with("|") {
             return ();
         }
+        let chidc: u64 = msg.channel_id.get();
+        let hm_ids: Option<HashMap<Option<u64>, Option<i64>>> = {
+            let data_read = ctx.data.read().await;
+            let a = data_read.get::<DataWrapper>().unwrap().clone();
+            let z = a.read().await;
+            let id = z.disc_id.clone();
+            println!("[INFO] at message: tele_id value: {:?}", id.clone());
+            id
+        };
+
+        let tele_id: Option<i64> = match hm_ids {
+            Some(val) => {
+                match val.get(&Some(chidc)) {
+                    Some(val) => {
+                        println!("User {} sent something in {}. BTW Telegram chat id is {:?}", msg.author.name, chidc, val);
+                        if val.is_none() {None}
+                        else {Some(val.unwrap())}
+                    },
+                    None => None
+                }
+            },
+            None => None
+        };
+
+        if tele_id.is_none() {
+            return ();
+        }
+
         let mesg: Msg = Msg::build(&msg);
         let lock = {
             let data_read = ctx.data.read().await;
@@ -141,13 +172,33 @@ impl EventHandler for Handler {
 
         {
             let server_wrapper = lock.write().await;
-            if let Err(why) = server_wrapper.server.send_request(mesg).await {
+            if let Err(why) = server_wrapper.server.send_request(mesg, tele_id.unwrap()).await {
                 println!("[ERROR] At message handler: {:?}", why);
             };
         }
     }
 
-    async fn ready(&self, _: Context, ready: Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
         println!("[Startup] INFO {} is online.", ready.user.name);
+
+        let lock = {
+            let data_read = ctx.data.read().await;
+            data_read.get::<DataWrapper>().unwrap().clone()
+        };
+
+        {
+            let mut data_wrapper = lock.write().await;
+            data_wrapper.context = Some(ctx.clone());
+        }
+        let server = {
+            let dr = ctx.data.read().await;
+            dr.get::<server::server::ServerWrapper>().unwrap().clone()
+        };
+
+        let server = {
+            let server = server.write().await;
+            server.server.clone()
+        };
+        server.run().await;
     }
 }

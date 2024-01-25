@@ -1,8 +1,6 @@
 use std::process;
 use std::sync::Arc;
 
-use tokio::join;
-
 use serenity::prelude::*;
 
 use discord::Config;
@@ -19,7 +17,12 @@ async fn main() {
     let handler: Handler = Handler;
 
     let mut client = Client::builder(config.token.clone(), GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT).event_handler(handler).await.expect("Err creating client.");
-    let server = server::Server::build(config);
+    let global_data = Arc::new(RwLock::new(discord::DataWrapper {
+        disc_id: None,
+        tele_id: None,
+        context: None
+    }));
+    let server = server::Server::build(config, global_data.clone());
 
     {
         let mut data = client.data.write().await;
@@ -28,14 +31,8 @@ async fn main() {
             server: server.clone()
         })));
 
-        data.insert::<discord::DataWrapper>(Arc::new(RwLock::new(discord::DataWrapper {
-            forum_id: 0,
-            tele_id: 0
-        })));
+        data.insert::<discord::DataWrapper>(global_data.clone());
     }
 
-    let _ = join!(
-        client.start(),
-        server.run()
-    );
+    let _ = client.start().await;
 }
