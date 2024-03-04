@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::channel::Attachment;
+use serenity::model::channel::PartialGuildChannel;
+use serenity::model::channel::GuildChannel;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 use serenity::builder::CreateAttachment;
@@ -175,6 +177,94 @@ impl EventHandler for Handler {
             if let Err(why) = server_wrapper.server.send_request(mesg, tele_id.unwrap()).await {
                 println!("[ERROR] At message handler: {:?}", why);
             };
+        }
+    }
+
+    async fn thread_delete(&self, ctx: Context, thread: PartialGuildChannel, _messages: Option<GuildChannel>) {
+        let del_fid: u64 = thread.id.get();
+
+        println!("Forum post deleted");
+        // Check which forum thread was deleted
+        let (disc_id, tele_id): (
+                Option<
+                    HashMap<Option<u64>, Option<i64>>
+                >, // disc_id
+                Option<
+                    HashMap<Option<i64>, Option<u64>>
+                > // tele_id
+            ) = {
+            let data_read = ctx.data.read().await;
+            let a = data_read.get::<DataWrapper>().unwrap().clone();
+            let z = a.read().await;
+            let fid = z.disc_id.clone();
+            let tid = z.tele_id.clone();
+
+            (fid, tid) // (disc_id, tele_id)
+        };
+
+        // Search for deleted forum thread
+        let thr_id: Option<i64> = match disc_id.clone() {
+            Some(hash_map) => {
+                match hash_map.get(&Some(del_fid)) {
+                    Some(val) => {
+                        if val.is_none() {
+                            None
+                        } else {
+                            Some(val.unwrap())
+                        }
+                    },
+                    None => None
+                }
+            },
+            None => None
+        };
+
+        if thr_id.is_none() {
+            // return
+        }
+
+        // if true, remove the deleted thread from the local tele_id and disc_id
+        // and insert them into the shared data
+
+        {
+            let mut cp_disc_id = disc_id.unwrap().clone();
+            let tel_id: Option<i64> = match cp_disc_id.remove(&Some(del_fid)).unwrap() {
+                Some(id) => {
+                    Some(id)
+                },
+                None => {
+                    println!("[ERROR] at Thread Delete event handler. Error in deleting id from discord data");
+                    None
+                }
+            };
+            let mut cp_tele_id = tele_id.unwrap().clone();
+            match cp_tele_id.remove(&tel_id) {
+                Some(_) => {},
+                None => {
+                    println!("[ERROR] at Thread Delete event handler. Error in deleting id from telegram data");
+                }
+            };
+            // delete disc_id first and get the tele_id, then delete the tele_id
+            
+            let data_write = ctx.data.write().await;
+            let a = data_write.get::<DataWrapper>().unwrap().clone();
+            let mut dw = a.write().await;
+
+            let disc = dw.disc_id.clone();
+            match disc {
+                Some(_x) => {
+                    dw.disc_id = Some(cp_disc_id.clone());
+                },
+                None => {
+                }
+            }
+            let tele = dw.tele_id.clone();
+            match tele {
+                Some(_x) => {
+                    dw.tele_id = Some(cp_tele_id.clone());
+                },
+                None => {}
+            }
         }
     }
 

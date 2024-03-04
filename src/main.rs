@@ -16,7 +16,7 @@ async fn main() {
     });
     let handler: Handler = Handler;
 
-    let mut client = Client::builder(config.token.clone(), GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT).event_handler(handler).await.expect("Err creating client.");
+    let mut client = Client::builder(config.token.clone(), GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT | GatewayIntents::GUILDS).event_handler(handler).await.expect("Err creating client.");
     let global_data = Arc::new(RwLock::new(discord::DataWrapper {
         disc_id: None,
         tele_id: None,
